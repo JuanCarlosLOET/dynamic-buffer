@@ -1,1 +1,1 @@
-console.log(5);
+export { default as DynamicBuffer } from "./dynamic-buffer.js";
