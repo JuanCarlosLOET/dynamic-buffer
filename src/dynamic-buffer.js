@@ -24,9 +24,13 @@ export class DynamicBuffer {
       maxCapacity,
       growthFactor,
     };
+
     const source = this.#setDataType(data);
 
     const needed = source.length;
+
+    this.#assertMaxCapacity(needed);
+
     this.#capacity = Math.max(initialCapacity, needed);
     this.#readOffset = 0;
     this.#writeOffset = needed;
@@ -51,6 +55,7 @@ export class DynamicBuffer {
   get consumedBytes() {
     return this.#readOffset;
   }
+
   write(data) {
     const source = this.#setDataType(data);
     this.#ensureWritable(source.length);
@@ -62,18 +67,18 @@ export class DynamicBuffer {
     // TODO: Implement compaction
 
     const required = this.#writeOffset + length;
-    this.#assertCapacity(required);
 
+    this.#assertMaxCapacity(required);
     this.#grow(required);
   }
 
-  #grow(required) {
+  #grow(requiredCapacity) {
     const newCapacity = Math.max(
-      required,
+      requiredCapacity,
       this.#capacity * this.#config.growthFactor,
     );
 
-    this.#assertCapacity(newCapacity);
+    this.#assertMaxCapacity(newCapacity);
 
     this.#arrayBuffer = new ArrayBuffer(newCapacity);
     this.#view = new DataView(this.#arrayBuffer);
@@ -84,20 +89,27 @@ export class DynamicBuffer {
   }
 
   #setDataType(data) {
+    // -- Uint8Array --
     if (data instanceof Uint8Array) {
       return data;
-    } else if (data instanceof ArrayBuffer) {
+    }
+    //  -- ArrayBuffer --
+    else if (data instanceof ArrayBuffer) {
       return new Uint8Array(data);
-    } else if (Array.isArray(data)) {
-      return Uint8Array.from(data);
-    } else if (typeof data === "string") {
+    }
+    // -- Array --
+    else if (Array.isArray(data)) {
       return Uint8Array.from(data);
     }
-
-    return new Uint8Array();
+    // -- number --
+    else if (Number.isInteger(data) && data >= 0 && data <= 255) {
+      return Uint8Array.of(data);
+    }
+    // TODO: Implement error handling for invalid data types
   }
-  #assertCapacity(required) {
-    if (required > this.#config.maxCapacity) {
+
+  #assertMaxCapacity(requiredLength) {
+    if (requiredLength > this.#config.maxCapacity) {
       // TODO: Implement overflow handling
     }
   }
