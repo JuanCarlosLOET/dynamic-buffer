@@ -82,6 +82,36 @@ export class DynamicBuffer {
     this.#writeOffset = readable;
   }
 
+  reserve(minCapacity) {
+    this.#assertMutable("reserve");
+
+    if (!Number.isInteger(minCapacity) || minCapacity < 0) {
+      // TODO: Throw an error for invalid capacity
+    }
+
+    if (minCapacity <= this.#capacity) return;
+    this.#grow(minCapacity);
+  }
+
+  fill(data, count) {
+    this.#assertMutable("fill");
+
+    if (!Number.isInteger(data) || data < 0 || data > 255) {
+      // TODO: throw TypeError when byte value is out of 0-255 range
+    }
+
+    if (Number.isInteger(count) || count < 0) {
+      // TODO: validate count is a non-negative integer and throw RangeError
+    }
+
+    if (count === 0) return this.#writeOffset;
+
+    this.#ensureWritable(count);
+    this.#uint8.fill(data, this.#writeOffset, this.#writeOffset + count);
+    this.#writeOffset += count;
+    return this.#writeOffset;
+  }
+
   write(data) {
     this.#assertMutable("write");
 
@@ -156,7 +186,7 @@ export class DynamicBuffer {
 
   #assertMutable(operation = "operation") {
     if (this.#frozen) {
-      // TODO: Throw error when buffer is frozen
+      // TODO: Implement frozen buffer handling
     }
   }
 }
