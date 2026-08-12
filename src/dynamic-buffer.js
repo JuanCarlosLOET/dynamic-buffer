@@ -10,6 +10,7 @@ export class DynamicBuffer {
   #readOffset;
   #writeOffset;
   #config;
+  #frozen;
 
   constructor(options = {}) {
     const {
@@ -38,6 +39,8 @@ export class DynamicBuffer {
     this.#arrayBuffer = new ArrayBuffer(this.#capacity);
     this.#uint8 = new Uint8Array(this.#arrayBuffer);
     this.#view = new DataView(this.#arrayBuffer);
+
+    this.#frozen = false;
   }
 
   get capacity() {
@@ -55,8 +58,33 @@ export class DynamicBuffer {
   get consumedBytes() {
     return this.#readOffset;
   }
+  get isFrozen() {
+    return this.#frozen;
+  }
+
+  freeze() {
+    this.#frozen = true;
+    return this;
+  }
+
+  compact() {
+    this.#assertMutable("compact");
+
+    if (this.#readOffset === 0) return;
+
+    const readable = this.readableBytes;
+
+    if (readable > 0) {
+      this.#uint8.copyWithin(0, this.#readOffset, this.#writeOffset);
+    }
+
+    this.#readOffset = 0;
+    this.#writeOffset = readable;
+  }
 
   write(data) {
+    this.#assertMutable("write");
+
     const source = this.#setDataType(data);
     const lengthSource = source.length;
 
@@ -123,6 +151,12 @@ export class DynamicBuffer {
   #assertMaxCapacity(requiredLength) {
     if (requiredLength > this.#config.maxCapacity) {
       // TODO: Implement overflow handling
+    }
+  }
+
+  #assertMutable(operation = "operation") {
+    if (this.#frozen) {
+      // TODO: Throw error when buffer is frozen
     }
   }
 }
