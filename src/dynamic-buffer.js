@@ -58,7 +58,15 @@ export class DynamicBuffer {
 
   write(data) {
     const source = this.#setDataType(data);
+    const lengthSource = source.length;
+
+    if (lengthSource === 0) return this.#writeOffset;
+
     this.#ensureWritable(source.length);
+
+    this.#uint8.set(data, this.#writeOffset);
+    this.#writeOffset += lengthSource;
+    return this.#writeOffset;
   }
 
   #ensureWritable(length) {
@@ -104,6 +112,10 @@ export class DynamicBuffer {
     // -- number --
     else if (Number.isInteger(data) && data >= 0 && data <= 255) {
       return Uint8Array.of(data);
+
+      // -- no data supplied --
+    } else if (data == null) {
+      return new Uint8Array(0);
     }
     // TODO: Implement error handling for invalid data types
   }
