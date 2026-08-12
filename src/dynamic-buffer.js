@@ -100,9 +100,7 @@ export class DynamicBuffer {
       // TODO: throw TypeError when byte value is out of 0-255 range
     }
 
-    if (Number.isInteger(count) || count < 0) {
-      // TODO: validate count is a non-negative integer and throw RangeError
-    }
+    this.#assertNonNegativeInteger(count, "fill");
 
     if (count === 0) return this.#writeOffset;
 
@@ -112,8 +110,8 @@ export class DynamicBuffer {
     return this.#writeOffset;
   }
 
-  write(data) {
-    this.#assertMutable("write");
+  append(data) {
+    this.#assertMutable("append");
 
     const source = this.#setDataType(data);
     const lengthSource = source.length;
@@ -125,6 +123,18 @@ export class DynamicBuffer {
     this.#uint8.set(data, this.#writeOffset);
     this.#writeOffset += lengthSource;
     return this.#writeOffset;
+  }
+
+  write(offset, data) {
+    this.#assertMutable("write");
+
+    const source = this.#setDataType(data);
+    const lengthSource = source.length;
+
+    if (lengthSource === 0) return this.#writeOffset;
+
+    this.#assertRange(offset, lengthSource, "write");
+    this.#uint8.set(data, offset);
   }
 
   #ensureWritable(length) {
@@ -187,6 +197,20 @@ export class DynamicBuffer {
   #assertMutable(operation = "operation") {
     if (this.#frozen) {
       // TODO: Implement frozen buffer handling
+    }
+  }
+  #assertNonNegativeInteger(value, operación = "operation") {
+    if (!Number.isInteger(value) || value < 0) {
+      // TODO: Throw error for invalid non-negative integer
+    }
+  }
+
+  #assertRange(offset, size, operation = "operation") {
+    this.#assertNonNegativeInteger(offset, operation);
+    this.#assertNonNegativeInteger(size);
+
+    if (offset + size > this.readableBytes) {
+      // TODO: Throw error for out of range access
     }
   }
 }
