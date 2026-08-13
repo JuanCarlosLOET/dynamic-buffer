@@ -162,7 +162,7 @@ export class DynamicBuffer {
     return this.#writeOffset;
   }
 
-  write(data, offset) {
+  write(data, offset = 0) {
     this.#assertMutable("write");
 
     const source = this.#setDataType(data);
@@ -170,7 +170,7 @@ export class DynamicBuffer {
 
     if (lengthSource === 0) return this.#writeOffset;
 
-    this.#assertRange(offset, lengthSource, "write");
+    this.#assertReadable(lengthSource, offset, "write");
 
     const newOffset = this.#readOffset + offset;
     this.#uint8.set(data, newOffset);
@@ -178,7 +178,25 @@ export class DynamicBuffer {
     return this.#writeOffset;
   }
 
-  peek(offset, length) {}
+  peek(size = this.readableBytes, offset = 0) {
+    this.#assertReadable(size, offset, "peek");
+
+    const start = this.#readOffset + offset;
+    const end = start + size;
+
+    log(start, end);
+    return this.#uint8.slice(start, end);
+  }
+
+  peekByte(offset = 0) {
+    this.#assertReadable(0, offset, "peekByte");
+    return this.#uint8[this.#readOffset + offset];
+  }
+
+  peekAt(size = this.#writeOffset, absoluteOffset = 0) {
+    this.#assertWrittenRange(size, absoluteOffset);
+    return this.#uint8[absoluteOffset];
+  }
 
   #ensureWritable(length) {
     if (this.writableSpace >= length) return;
@@ -189,6 +207,24 @@ export class DynamicBuffer {
 
     this.#assertMaxCapacity(required);
     this.#grow(required);
+  }
+
+  #assertWrittenRange(size, offset, operation = "operation") {
+    this.#assertNonNegativeInteger(offset, operation);
+    this.#assertNonNegativeInteger(size, operation);
+
+    if (offset + size > this.#writeOffset) {
+      // TODO: Throw error for out of range access
+    }
+  }
+
+  #assertReadable(size, offset, operation = "operation") {
+    this.#assertNonNegativeInteger(offset, operation);
+    (this.#assertNonNegativeInteger(size), operation);
+
+    if (size > this.readableBytes - offset) {
+      // TODO: Throw error for out of range access
+    }
   }
 
   #grow(requiredCapacity) {
@@ -245,15 +281,6 @@ export class DynamicBuffer {
   #assertNonNegativeInteger(value, operación = "operation") {
     if (!Number.isSafeInteger(value) || value < 0) {
       // TODO: Throw error for invalid non-negative integer
-    }
-  }
-
-  #assertRange(offset, size, operation = "operation") {
-    this.#assertNonNegativeInteger(offset, operation);
-    (this.#assertNonNegativeInteger(size), operation);
-    log(size, offset);
-    if (size > this.readableBytes - offset) {
-      // TODO: Throw error for out of range access
     }
   }
 }
