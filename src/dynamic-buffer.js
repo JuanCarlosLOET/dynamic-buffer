@@ -172,8 +172,8 @@ export class DynamicBuffer {
 
     this.#assertRange(offset, lengthSource, "write");
 
-    const finalOffset = this.#readOffset + offset;
-    this.#uint8.set(data, finalOffset);
+    const newOffset = this.#readOffset + offset;
+    this.#uint8.set(data, newOffset);
 
     return this.#writeOffset;
   }
