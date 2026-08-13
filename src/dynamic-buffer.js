@@ -193,9 +193,16 @@ export class DynamicBuffer {
     return this.#uint8[this.#readOffset + offset];
   }
 
-  peekAt(size = this.#writeOffset, absoluteOffset = 0) {
-    this.#assertWrittenRange(size, absoluteOffset);
-    return this.#uint8[absoluteOffset];
+  at(absoluteIndex = 0) {
+    this.#assertWrittenRange(0, absoluteIndex, "at");
+
+    const finalIndexAbs =
+      absoluteIndex < 0 ? absoluteIndex + this.#writeOffset : absoluteIndex;
+
+    if (absoluteIndex < 0 || absoluteIndex > this.#writeOffset) {
+      // TODO: Implement index out-of-bounds error
+    }
+    return this.#uint8[finalIndexAbs];
   }
 
   #ensureWritable(length) {
