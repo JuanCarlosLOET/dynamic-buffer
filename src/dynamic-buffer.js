@@ -1,5 +1,7 @@
-const DEFAULT_INITIAL_CAPACITY = 1024 * 2;
-const DEFAULT_MAX_CAPACITY = 1024 * 4;
+import { log } from "node:console";
+import { inspect } from "node:util";
+const DEFAULT_INITIAL_CAPACITY = 256 * 1;
+const DEFAULT_MAX_CAPACITY = 256 * 2;
 const DEFAULT_GROWTH_FACTOR = 2.0;
 
 export class DynamicBuffer {
@@ -12,9 +14,8 @@ export class DynamicBuffer {
   #config;
   #frozen;
 
-  constructor(options = {}) {
+  constructor(data, options = {}) {
     const {
-      data,
       initialCapacity = DEFAULT_INITIAL_CAPACITY,
       maxCapacity = DEFAULT_MAX_CAPACITY,
       growthFactor = DEFAULT_GROWTH_FACTOR,
@@ -40,7 +41,21 @@ export class DynamicBuffer {
     this.#uint8 = new Uint8Array(this.#arrayBuffer);
     this.#view = new DataView(this.#arrayBuffer);
 
+    if (needed > 0) {
+      this.#uint8.set(source, 0);
+    }
+
     this.#frozen = false;
+  }
+
+  // Test-only setter for readOffset.
+  set readOffset(value) {
+    this.#readOffset = value;
+  }
+
+  // Test-only getter for dataBuffer.
+  get dataBuffer() {
+    return this.#uint8;
   }
 
   get capacity() {
@@ -60,6 +75,28 @@ export class DynamicBuffer {
   }
   get isFrozen() {
     return this.#frozen;
+  }
+
+  [inspect.custom](depth, options, inspect) {
+    const rows = [
+      ["capacity", this.capacity],
+      ["readOffset", this.#readOffset],
+      ["writeOffset", this.#writeOffset],
+      ["readableBytes", this.readableBytes],
+      ["consumedBytes", this.consumedBytes],
+      ["writableSpace", this.writableSpace],
+    ];
+
+    const keyWidth = Math.max(...rows.map(([key]) => key.length));
+
+    const body = rows
+      .map(
+        ([key, value]) =>
+          `  ${key.padEnd(keyWidth)} : ${inspect(value, options)}`,
+      )
+      .join("\n");
+
+    return `DynamicBuffer {\n${body}\n}`;
   }
 
   freeze() {
@@ -125,7 +162,7 @@ export class DynamicBuffer {
     return this.#writeOffset;
   }
 
-  write(offset, data) {
+  write(data, offset) {
     this.#assertMutable("write");
 
     const source = this.#setDataType(data);
@@ -134,8 +171,14 @@ export class DynamicBuffer {
     if (lengthSource === 0) return this.#writeOffset;
 
     this.#assertRange(offset, lengthSource, "write");
-    this.#uint8.set(data, offset);
+
+    const finalOffset = this.#readOffset + offset;
+    this.#uint8.set(data, finalOffset);
+
+    return this.#writeOffset;
   }
+
+  peek(offset, length) {}
 
   #ensureWritable(length) {
     if (this.writableSpace >= length) return;
@@ -200,16 +243,16 @@ export class DynamicBuffer {
     }
   }
   #assertNonNegativeInteger(value, operación = "operation") {
-    if (!Number.isInteger(value) || value < 0) {
+    if (!Number.isSafeInteger(value) || value < 0) {
       // TODO: Throw error for invalid non-negative integer
     }
   }
 
   #assertRange(offset, size, operation = "operation") {
     this.#assertNonNegativeInteger(offset, operation);
-    this.#assertNonNegativeInteger(size);
-
-    if (offset + size > this.readableBytes) {
+    (this.#assertNonNegativeInteger(size), operation);
+    log(size, offset);
+    if (size > this.readableBytes - offset) {
       // TODO: Throw error for out of range access
     }
   }
