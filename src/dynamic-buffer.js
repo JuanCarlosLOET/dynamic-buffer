@@ -119,15 +119,15 @@ export class DynamicBuffer {
     this.#writeOffset = readable;
   }
 
-  reserve(minCapacity) {
-    this.#assertMutable("reserve");
+  expand(additionalBytes = 0) {
+    this.#assertMutable("expand");
 
-    if (!Number.isInteger(minCapacity) || minCapacity < 0) {
-      // TODO: Throw an error for invalid capacity
-    }
+    this.#assertNonNegativeInteger(additionalBytes);
 
-    if (minCapacity <= this.#capacity) return;
-    this.#grow(minCapacity);
+    if (additionalBytes === 0) return this.#capacity;
+
+    const newCapacity = this.#capacity + additionalBytes;
+    this.#assertMaxCapacity(newCapacity);
   }
 
   fill(data, count) {
@@ -141,7 +141,7 @@ export class DynamicBuffer {
 
     if (count === 0) return this.#writeOffset;
 
-    this.#ensureWritable(count);
+    this.#assertWritable(count);
     this.#uint8.fill(data, this.#writeOffset, this.#writeOffset + count);
     this.#writeOffset += count;
     return this.#writeOffset;
@@ -155,7 +155,7 @@ export class DynamicBuffer {
 
     if (lengthSource === 0) return this.#writeOffset;
 
-    this.#ensureWritable(source.length);
+    this.#assertWritable(source.length);
 
     this.#uint8.set(data, this.#writeOffset);
     this.#writeOffset += lengthSource;
@@ -205,7 +205,7 @@ export class DynamicBuffer {
     return this.#uint8[finalIndexAbs];
   }
 
-  #ensureWritable(length) {
+  #assertWritable(length) {
     if (this.writableSpace >= length) return;
 
     // TODO: Implement compaction
@@ -216,7 +216,7 @@ export class DynamicBuffer {
     this.#grow(required);
   }
 
-  #assertWrittenRange(size, offset, operation = "operation") {
+  #assertWrittenRange(size, offset = 0, operation = "operation") {
     this.#assertNonNegativeInteger(offset, operation);
     this.#assertNonNegativeInteger(size, operation);
 
@@ -225,7 +225,11 @@ export class DynamicBuffer {
     }
   }
 
-  #assertReadable(size, offset, operation = "operation") {
+  #assertReadable(
+    size = this.#readOffset,
+    offset = 0,
+    operation = "operation",
+  ) {
     this.#assertNonNegativeInteger(offset, operation);
     (this.#assertNonNegativeInteger(size), operation);
 
@@ -235,6 +239,8 @@ export class DynamicBuffer {
   }
 
   #grow(requiredCapacity) {
+    if (requiredCapacity <= this.#capacity) return;
+
     const newCapacity = Math.max(
       requiredCapacity,
       this.#capacity * this.#config.growthFactor,
