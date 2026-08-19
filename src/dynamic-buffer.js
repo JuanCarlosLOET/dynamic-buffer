@@ -1,8 +1,8 @@
 import { log } from "node:console";
 import { inspect } from "node:util";
 
-const INITIAL_CAPACITY_POWER = 5;
-const MAX_CAPACITY_POWER = 20;
+const INITIAL_EXPONENTE = 5;
+const MAX_CAPACITY_POWER = 9;
 const COMPACT_THRESHOLD = 0.75;
 
 function alignToPowerOfTwo(value) {
@@ -22,39 +22,39 @@ export class DynamicBuffer {
 
   constructor(data, options = {}) {
     const {
-      initialCapacityPower = INITIAL_CAPACITY_POWER,
-      maxCapacityPower = MAX_CAPACITY_POWER,
-      growthFactor = DEFAULT_GROWTH_FACTOR,
+      initialExponent = INITIAL_EXPONENTE,
+      maxCapacityExponent = MAX_CAPACITY_POWER,
       compactThreshold = COMPACT_THRESHOLD,
     } = options;
 
     this.#config = {
-      maxCapacityPower,
+      maxCapacityExponent,
       compactThreshold,
     };
 
     const source = this.#setDataType(data);
     const needed = source.length;
 
-    this.#assertMaxCapacity(needed);
-
-    const initialCapacity = 1 << initialCapacityPower;
     const alignedCapacity = alignToPowerOfTwo(needed);
 
-    this.#capacity = Math.max(initialCapacity, alignedCapacity);
-    this.#readOffset = 0;
-    this.#writeOffset = alignedCapacity;
+    this.#assertMaxCapacity(alignedCapacity);
 
-    this.#arrayBuffer = new ArrayBuffer(this.#capacity);
+    this.#capacity = Math.max(initialExponent, alignedCapacity);
+
+    this.#readOffset = 0;
+    this.#writeOffset = needed;
+
+    const capacityBytes = Math.pow(2, this.#capacity);
+
+    this.#arrayBuffer = new ArrayBuffer(capacityBytes);
     this.#uint8 = new Uint8Array(this.#arrayBuffer);
     this.#view = new DataView(this.#arrayBuffer);
 
-    if (alignedCapacity > 0) {
+    if (needed > 0) {
       this.#uint8.set(source, 0);
     }
 
     this.#frozen = false;
-    this.#maxCapacity = 1 << maxCapacityPower;
   }
 
   // Test-only setter for readOffset.
@@ -140,7 +140,10 @@ export class DynamicBuffer {
     if (additionalBytes === 0) return this.#capacity;
 
     const newCapacity = this.#capacity + additionalBytes;
+
     this.#assertMaxCapacity(newCapacity);
+
+    this.#capacity = alignToPowerOfTwo(newCapacity);
   }
 
   fill(data, count) {
@@ -166,6 +169,8 @@ export class DynamicBuffer {
     const lengthSource = source.length;
 
     if (lengthSource === 0) return this.#writeOffset;
+
+    this.#ensureCapacity(lengthSource);
 
     this.#uint8.set(data, this.#writeOffset);
     this.#writeOffset += lengthSource;
@@ -280,8 +285,8 @@ export class DynamicBuffer {
     // TODO: Implement error handling for invalid data types
   }
 
-  #assertMaxCapacity(requiredLength) {
-    if (requiredLength > this.#maxCapacity) {
+  #assertMaxCapacity(newCapacity) {
+    if (newCapacity > this.#config.maxCapacityExponent) {
       // TODO: Implement overflow handling
     }
   }
