@@ -3,7 +3,6 @@ import { inspect } from "node:util";
 
 const INITIAL_CAPACITY_POWER = 5;
 const MAX_CAPACITY_POWER = 20;
-const DEFAULT_GROWTH_FACTOR = 2.0;
 const COMPACT_THRESHOLD = 0.75;
 
 function alignToPowerOfTwo(value) {
@@ -12,6 +11,7 @@ function alignToPowerOfTwo(value) {
 
 export class DynamicBuffer {
   #capacity;
+  #maxCapacity;
   #view;
   #uint8;
   #arrayBuffer;
@@ -30,7 +30,6 @@ export class DynamicBuffer {
 
     this.#config = {
       maxCapacityPower,
-      growthFactor,
       compactThreshold,
     };
 
@@ -55,6 +54,7 @@ export class DynamicBuffer {
     }
 
     this.#frozen = false;
+    this.#maxCapacity = 1 << maxCapacityPower;
   }
 
   // Test-only setter for readOffset.
@@ -69,6 +69,10 @@ export class DynamicBuffer {
 
   get capacity() {
     return this.#capacity;
+  }
+
+  get maxCapacity() {
+    return this.#maxCapacity;
   }
 
   get readableBytes() {
@@ -200,8 +204,6 @@ export class DynamicBuffer {
   }
 
   at(absoluteIndex = 0) {
-    this.#assertWrittenRange(0, absoluteIndex, "at");
-
     const finalIndexAbs =
       absoluteIndex < 0 ? absoluteIndex + this.#writeOffset : absoluteIndex;
 
@@ -209,15 +211,6 @@ export class DynamicBuffer {
       // TODO: Implement index out-of-bounds error
     }
     return this.#uint8[finalIndexAbs];
-  }
-
-  #assertWrittenRange(size, offset = 0, operation = "operation") {
-    this.#assertNonNegativeInteger(offset, operation);
-    this.#assertNonNegativeInteger(size, operation);
-
-    if (offset + size > this.#writeOffset) {
-      // TODO: Throw error for out of range access
-    }
   }
 
   #assertReadable(
@@ -233,10 +226,8 @@ export class DynamicBuffer {
     }
   }
 
-  #grow(needBytes) {
-    const newCapacity = Math.trunc(this.#capacity * this.#config.growthFactor);
-
-    this.#assertMaxCapacity(newCapacity);
+  #growToPower(needPower) {
+    const newCapacity = 1 << needPower;
 
     this.#arrayBuffer = new ArrayBuffer(newCapacity);
     this.#view = new DataView(this.#arrayBuffer);
@@ -256,12 +247,13 @@ export class DynamicBuffer {
   #ensureCapacity(needBytes) {
     this.#maybeCompact();
 
-    if (this.writableSpace >= needBytes) return;
-
     const requiredCapacity = this.#writeOffset + needBytes;
-    this.#assertMaxCapacity(requiredCapacity);
+    if (this.capacity >= requiredCapacity) return;
 
-    this.#grow(requiredCapacity);
+    const newCapacityPower = alignToPowerOfTwo(requiredCapacity);
+    this.#assertMaxCapacity(newCapacityPower);
+
+    this.#growToPower(newCapacityPower);
   }
 
   #setDataType(data) {
@@ -289,7 +281,7 @@ export class DynamicBuffer {
   }
 
   #assertMaxCapacity(requiredLength) {
-    if (requiredLength > this.#config.maxCapacity) {
+    if (requiredLength > this.#maxCapacity) {
       // TODO: Implement overflow handling
     }
   }
