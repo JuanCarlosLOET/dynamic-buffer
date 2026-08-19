@@ -1,8 +1,14 @@
 import { log } from "node:console";
 import { inspect } from "node:util";
-const DEFAULT_INITIAL_CAPACITY = 256 * 1;
-const DEFAULT_MAX_CAPACITY = 256 * 2;
+
+const INITIAL_CAPACITY_POWER = 5;
+const MAX_CAPACITY_POWER = 20;
 const DEFAULT_GROWTH_FACTOR = 2.0;
+const COMPACT_THRESHOLD = 0.75;
+
+function alignToPowerOfTwo(value) {
+  return 1 << (32 - Math.clz32(value - 1));
+}
 
 export class DynamicBuffer {
   #capacity;
@@ -16,32 +22,35 @@ export class DynamicBuffer {
 
   constructor(data, options = {}) {
     const {
-      initialCapacity = DEFAULT_INITIAL_CAPACITY,
-      maxCapacity = DEFAULT_MAX_CAPACITY,
+      initialCapacityPower = INITIAL_CAPACITY_POWER,
+      maxCapacityPower = MAX_CAPACITY_POWER,
       growthFactor = DEFAULT_GROWTH_FACTOR,
+      compactThreshold = COMPACT_THRESHOLD,
     } = options;
 
     this.#config = {
-      initialCapacity,
-      maxCapacity,
+      maxCapacityPower,
       growthFactor,
+      compactThreshold,
     };
 
     const source = this.#setDataType(data);
-
     const needed = source.length;
 
     this.#assertMaxCapacity(needed);
 
-    this.#capacity = Math.max(initialCapacity, needed);
+    const initialCapacity = 1 << initialCapacityPower;
+    const alignedCapacity = alignToPowerOfTwo(needed);
+
+    this.#capacity = Math.max(initialCapacity, alignedCapacity);
     this.#readOffset = 0;
-    this.#writeOffset = needed;
+    this.#writeOffset = alignedCapacity;
 
     this.#arrayBuffer = new ArrayBuffer(this.#capacity);
     this.#uint8 = new Uint8Array(this.#arrayBuffer);
     this.#view = new DataView(this.#arrayBuffer);
 
-    if (needed > 0) {
+    if (alignedCapacity > 0) {
       this.#uint8.set(source, 0);
     }
 
@@ -141,7 +150,6 @@ export class DynamicBuffer {
 
     if (count === 0) return this.#writeOffset;
 
-    this.#assertWritable(count);
     this.#uint8.fill(data, this.#writeOffset, this.#writeOffset + count);
     this.#writeOffset += count;
     return this.#writeOffset;
@@ -154,8 +162,6 @@ export class DynamicBuffer {
     const lengthSource = source.length;
 
     if (lengthSource === 0) return this.#writeOffset;
-
-    this.#assertWritable(source.length);
 
     this.#uint8.set(data, this.#writeOffset);
     this.#writeOffset += lengthSource;
@@ -205,17 +211,6 @@ export class DynamicBuffer {
     return this.#uint8[finalIndexAbs];
   }
 
-  #assertWritable(length) {
-    if (this.writableSpace >= length) return;
-
-    // TODO: Implement compaction
-
-    const required = this.#writeOffset + length;
-
-    this.#assertMaxCapacity(required);
-    this.#grow(required);
-  }
-
   #assertWrittenRange(size, offset = 0, operation = "operation") {
     this.#assertNonNegativeInteger(offset, operation);
     this.#assertNonNegativeInteger(size, operation);
@@ -238,13 +233,8 @@ export class DynamicBuffer {
     }
   }
 
-  #grow(requiredCapacity) {
-    if (requiredCapacity <= this.#capacity) return;
-
-    const newCapacity = Math.max(
-      requiredCapacity,
-      this.#capacity * this.#config.growthFactor,
-    );
+  #grow(needBytes) {
+    const newCapacity = Math.trunc(this.#capacity * this.#config.growthFactor);
 
     this.#assertMaxCapacity(newCapacity);
 
@@ -254,6 +244,24 @@ export class DynamicBuffer {
     const newUint8 = new Uint8Array(this.#arrayBuffer);
     this.#uint8 = newUint8.set(this.#uint8.subarray(0, this.#writeOffset));
     this.#capacity = newCapacity;
+  }
+
+  #maybeCompact() {
+    const radio = this.readOffset / this.#capacity;
+    if (radio >= this.#config.compactThreshold) {
+      this.compact();
+    }
+  }
+
+  #ensureCapacity(needBytes) {
+    this.#maybeCompact();
+
+    if (this.writableSpace >= needBytes) return;
+
+    const requiredCapacity = this.#writeOffset + needBytes;
+    this.#assertMaxCapacity(requiredCapacity);
+
+    this.#grow(requiredCapacity);
   }
 
   #setDataType(data) {
