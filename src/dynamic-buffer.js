@@ -8,12 +8,17 @@ const COMPACT_THRESHOLD = 0.75;
 const TYPE_SIZES = Object.freeze({
   int8: 1,
   uint8: 1,
+
   int16: 2,
   uint16: 2,
+
   int32: 4,
   uint32: 4,
+
+  float16: 2,
   float32: 4,
   float64: 8,
+
   bigint64: 8,
   biguint64: 8,
 });
@@ -221,6 +226,76 @@ export class DynamicBuffer {
 
     return data;
   }
+
+  readInt8(offset) {
+    return this.#readType(offset, "int8");
+  }
+
+  readUint8(offset) {
+    return this.#readType(offset, "uint8");
+  }
+
+  readInt16(offset, littleEndian = false) {
+    return this.#readType(offset, "int16", littleEndian);
+  }
+
+  readUint16(offset, littleEndian = false) {
+    return this.#readType(offset, "uint16", littleEndian);
+  }
+
+  readInt32(offset, littleEndian = false) {
+    return this.#readType(offset, "int32", littleEndian);
+  }
+
+  readUint32(offset, littleEndian = false) {
+    return this.#readType(offset, "uint32", littleEndian);
+  }
+
+  readFloat16(offset, littleEndian = false) {
+    return this.#readType(offset, "float16", littleEndian);
+  }
+
+  readFloat32(offset, littleEndian = false) {
+    return this.#readType(offset, "float32", littleEndian);
+  }
+
+  readFloat64(offset, littleEndian = false) {
+    return this.#readType(offset, "float64", littleEndian);
+  }
+
+  readBigInt64(offset, littleEndian = false) {
+    return this.#readType(offset, "bigint64", littleEndian);
+  }
+
+  readBigUint64(offset, littleEndian = false) {
+    return this.#readType(offset, "biguint64", littleEndian);
+  }
+
+  #readType(offset = 0, type, littleEndian = false) {
+    const TYPE = {
+      int8: () => this.#view.getInt8(offset),
+      uint8: () => this.#view.getUint8(offset),
+
+      int16: () => this.#view.getInt16(offset, littleEndian),
+      uint16: () => this.#view.getUint16(offset, littleEndian),
+
+      int32: () => this.#view.getInt32(offset, littleEndian),
+      uint32: () => this.#view.getUint32(offset, littleEndian),
+
+      float16: () => this.#view.getFloat16(offset, littleEndian),
+      float32: () => this.#view.getFloat32(offset, littleEndian),
+      float64: () => this.#view.getFloat64(offset, littleEndian),
+
+      bigint64: () => this.#view.getBigInt64(offset, littleEndian),
+      biguint64: () => this.#view.getBigUint64(offset, littleEndian),
+    };
+
+    const size = TYPE_SIZES[type];
+    this.#assertReadable(size, offset);
+
+    return TYPE[type]();
+  }
+
   #assertReadable(
     size = this.#readOffset,
     offset = 0,
