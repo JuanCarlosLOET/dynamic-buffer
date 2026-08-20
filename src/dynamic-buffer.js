@@ -177,6 +177,41 @@ export class DynamicBuffer {
     return this;
   }
 
+  writeInt8(offset, value) {
+    this.#writeType(offset, "int8", value);
+  }
+
+  writeUint8(offset, value) {
+    this.#writeType(offset, "uint8", value);
+  }
+  writeInt16(offset, value, le = false) {
+    this.#writeType(offset, "int16", value, le);
+  }
+  writeUint16(offset, value, le = false) {
+    this.#writeType(offset, "uint16", value, le);
+  }
+  writeInt32(offset, value, le = false) {
+    this.#writeType(offset, "int32", value, le);
+  }
+  writeUint32(offset, value, le = false) {
+    this.#writeType(offset, "uint32", value, le);
+  }
+  writeFloat16(offset, value, le = false) {
+    this.#writeType(offset, "float16", value, le);
+  }
+  writeFloat32(offset, value, le = false) {
+    this.#writeType(offset, "float32", value, le);
+  }
+  writeFloat64(offset, value, le = false) {
+    this.#writeType(offset, "float64", value, le);
+  }
+  writeBigInt64(offset, value, le = false) {
+    this.#writeType(offset, "bigint64", value, le);
+  }
+  writeBigUint64(offset, value, le = false) {
+    this.#writeType(offset, "biguint64", value, le);
+  }
+
   append(data) {
     this.#assertMutable("append");
 
@@ -227,71 +262,119 @@ export class DynamicBuffer {
     return data;
   }
 
-  readInt8(offset) {
+  readInt8(offset = 0) {
+    this.#assertNonNegativeInteger(offset);
     return this.#readType(offset, "int8");
   }
 
-  readUint8(offset) {
+  readUint8(offset = 0) {
     return this.#readType(offset, "uint8");
   }
 
-  readInt16(offset, littleEndian = false) {
+  readInt16(offset = 0, littleEndian = false) {
     return this.#readType(offset, "int16", littleEndian);
   }
 
-  readUint16(offset, littleEndian = false) {
+  readUint16(offset = 0, littleEndian = false) {
     return this.#readType(offset, "uint16", littleEndian);
   }
 
-  readInt32(offset, littleEndian = false) {
+  readInt32(offset = 0, littleEndian = false) {
     return this.#readType(offset, "int32", littleEndian);
   }
 
-  readUint32(offset, littleEndian = false) {
+  readUint32(offset = 0, littleEndian = false) {
     return this.#readType(offset, "uint32", littleEndian);
   }
 
-  readFloat16(offset, littleEndian = false) {
+  readFloat16(offset = 0, littleEndian = false) {
     return this.#readType(offset, "float16", littleEndian);
   }
 
-  readFloat32(offset, littleEndian = false) {
+  readFloat32(offset = 0, littleEndian = false) {
     return this.#readType(offset, "float32", littleEndian);
   }
 
-  readFloat64(offset, littleEndian = false) {
+  readFloat64(offset = 0, littleEndian = false) {
     return this.#readType(offset, "float64", littleEndian);
   }
 
-  readBigInt64(offset, littleEndian = false) {
+  readBigInt64(offset = 0, littleEndian = false) {
     return this.#readType(offset, "bigint64", littleEndian);
   }
 
-  readBigUint64(offset, littleEndian = false) {
+  readBigUint64(offset = 0, littleEndian = false) {
     return this.#readType(offset, "biguint64", littleEndian);
   }
 
-  #readType(offset = 0, type, littleEndian = false) {
-    const TYPE = {
-      int8: () => this.#view.getInt8(offset),
-      uint8: () => this.#view.getUint8(offset),
+  #writeType(offset, type, value, littleEndian) {
+    this.#assertNonNegativeInteger(offset);
+    this.#assertMutable("writeType");
 
-      int16: () => this.#view.getInt16(offset, littleEndian),
-      uint16: () => this.#view.getUint16(offset, littleEndian),
-
-      int32: () => this.#view.getInt32(offset, littleEndian),
-      uint32: () => this.#view.getUint32(offset, littleEndian),
-
-      float16: () => this.#view.getFloat16(offset, littleEndian),
-      float32: () => this.#view.getFloat32(offset, littleEndian),
-      float64: () => this.#view.getFloat64(offset, littleEndian),
-
-      bigint64: () => this.#view.getBigInt64(offset, littleEndian),
-      biguint64: () => this.#view.getBigUint64(offset, littleEndian),
-    };
+    if (
+      !Number.isFinite(value) &&
+      typeof value !== "bigint" &&
+      !(Array.isArray(value) && value.length === 1)
+    ) {
+      // TODO: Implement error handling.
+      throw new Error("Not implemented");
+    }
 
     const size = TYPE_SIZES[type];
+
+    const needBytes = size + offset;
+
+    this.#ensureCapacity(needBytes);
+
+    const TYPE = {
+      int8: (value) => this.#view.setInt8(offset, value),
+      uint8: (value) => this.#view.setUint8(offset, value),
+
+      int16: (value) => this.#view.setInt16(offset, value, littleEndian),
+      uint16: (value) => this.#view.setUint16(offset, value, littleEndian),
+
+      int32: (value) => this.#view.setInt32(offset, value, littleEndian),
+      uint32: (value) => this.#view.setUint32(offset, value, littleEndian),
+
+      float16: (value) => this.#view.setFloat16(offset, value, littleEndian),
+      float32: (value) => this.#view.setFloat32(offset, value, littleEndian),
+      float64: (value) => this.#view.setFloat64(offset, value, littleEndian),
+
+      bigint64: (value) => this.#view.setBigInt64(offset, value, littleEndian),
+      biguint64: (value) =>
+        this.#view.setBigUint64(offset, value, littleEndian),
+    };
+
+    TYPE[type](value);
+    this.#writeOffset += needBytes;
+  }
+
+  #readType(offset, type, littleEndian = false) {
+    const size = TYPE_SIZES[type];
+
+    this.#assertNonNegativeInteger(offset);
+
     this.#assertReadable(size, offset);
+
+    const finalOffset = this.#readOffset + offset;
+
+    const TYPE = {
+      int8: () => this.#view.getInt8(finalOffset),
+      uint8: () => this.#view.getUint8(finalOffset),
+
+      int16: () => this.#view.getInt16(finalOffset, littleEndian),
+      uint16: () => this.#view.getUint16(finalOffset, littleEndian),
+
+      int32: () => this.#view.getInt32(finalOffset, littleEndian),
+      uint32: () => this.#view.getUint32(finalOffset, littleEndian),
+
+      float16: () => this.#view.getFloat16(finalOffset, littleEndian),
+      float32: () => this.#view.getFloat32(finalOffset, littleEndian),
+      float64: () => this.#view.getFloat64(finalOffset, littleEndian),
+
+      bigint64: () => this.#view.getBigInt64(finalOffset, littleEndian),
+      biguint64: () => this.#view.getBigUint64(finalOffset, littleEndian),
+    };
 
     return TYPE[type]();
   }
