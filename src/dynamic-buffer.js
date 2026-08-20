@@ -5,6 +5,19 @@ const INITIAL_EXPONENTE = 5;
 const MAX_CAPACITY_POWER = 9;
 const COMPACT_THRESHOLD = 0.75;
 
+const TYPE_SIZES = Object.freeze({
+  int8: 1,
+  uint8: 1,
+  int16: 2,
+  uint16: 2,
+  int32: 4,
+  uint32: 4,
+  float32: 4,
+  float64: 8,
+  bigint64: 8,
+  biguint64: 8,
+});
+
 function alignToPowerOfTwo(value) {
   return 1 << (32 - Math.clz32(value - 1));
 }
@@ -188,7 +201,6 @@ export class DynamicBuffer {
     const start = this.#readOffset + offset;
     const end = start + size;
 
-    log(start, end);
     return this.#uint8.slice(start, end);
   }
 
@@ -197,16 +209,18 @@ export class DynamicBuffer {
     return this.#uint8[this.#readOffset + offset];
   }
 
-  at(absoluteIndex = 0) {
-    const finalIndexAbs =
-      absoluteIndex < 0 ? absoluteIndex + this.#writeOffset : absoluteIndex;
+  read(offset = 0) {
+    this.#assertMutable("read");
+    this.#assertReadable(offset);
 
-    if (absoluteIndex < 0 || absoluteIndex > this.#writeOffset) {
-      // TODO: Implement index out-of-bounds error
-    }
-    return this.#uint8[finalIndexAbs];
+    const start = this.#readOffset + offset;
+    const end = this.#writeOffset;
+
+    const data = this.#uint8.slice(start, end);
+    this.#readOffset += offset;
+
+    return data;
   }
-
   #assertReadable(
     size = this.#readOffset,
     offset = 0,
@@ -215,8 +229,14 @@ export class DynamicBuffer {
     this.#assertNonNegativeInteger(offset, operation);
     (this.#assertNonNegativeInteger(size), operation);
 
+    if (offset <= size - 1) {
+      // TODO: Throw error for out of range access
+      throw new Error("not implemented");
+    }
+
     if (size > this.readableBytes - offset) {
       // TODO: Throw error for out of range access
+      throw new Error("not implemented");
     }
   }
 
