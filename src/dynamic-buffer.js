@@ -307,6 +307,20 @@ export class DynamicBuffer {
     return this.#readType(offset, "biguint64", littleEndian);
   }
 
+  clear(clear = false) {
+    this.#assertMutable("clear");
+
+    const discarded = this.#writeOffset;
+
+    if (clear) {
+      this.#uint8.fill(0, 0, this.capacity);
+    }
+    this.#writeOffset = 0;
+    this.#readOffset = 0;
+
+    return discarded;
+  }
+
   #writeType(offset, type, value, littleEndian) {
     this.#assertNonNegativeInteger(offset);
     this.#assertMutable("writeType");
