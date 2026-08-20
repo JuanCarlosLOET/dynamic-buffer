@@ -10,8 +10,7 @@ function alignToPowerOfTwo(value) {
 }
 
 export class DynamicBuffer {
-  #capacity;
-  #maxCapacity;
+  #capacityExponent;
   #view;
   #uint8;
   #arrayBuffer;
@@ -32,19 +31,19 @@ export class DynamicBuffer {
       compactThreshold,
     };
 
-    const source = this.#setDataType(data);
+    const source = this.#toUint8Array(data);
     const needed = source.length;
 
-    const alignedCapacity = alignToPowerOfTwo(needed);
+    const needExponent = alignToPowerOfTwo(needed);
 
-    this.#assertMaxCapacity(alignedCapacity);
+    this.#assertMaxCapacity(needExponent);
 
-    this.#capacity = Math.max(initialExponent, alignedCapacity);
+    this.#capacityExponent = Math.max(initialExponent, needExponent);
 
     this.#readOffset = 0;
     this.#writeOffset = needed;
 
-    const capacityBytes = Math.pow(2, this.#capacity);
+    const capacityBytes = 1 << this.#capacityExponent;
 
     this.#arrayBuffer = new ArrayBuffer(capacityBytes);
     this.#uint8 = new Uint8Array(this.#arrayBuffer);
@@ -68,11 +67,7 @@ export class DynamicBuffer {
   }
 
   get capacity() {
-    return this.#capacity;
-  }
-
-  get maxCapacity() {
-    return this.#maxCapacity;
+    return 1 << this.#capacityExponent;
   }
 
   get readableBytes() {
@@ -80,7 +75,7 @@ export class DynamicBuffer {
   }
 
   get writableSpace() {
-    return this.#capacity - this.#writeOffset;
+    return this.capacity - this.#writeOffset;
   }
 
   get consumedBytes() {
@@ -132,65 +127,59 @@ export class DynamicBuffer {
     this.#writeOffset = readable;
   }
 
-  expand(additionalBytes = 0) {
+  expand(steps = 1) {
     this.#assertMutable("expand");
 
-    this.#assertNonNegativeInteger(additionalBytes);
+    this.#assertNonNegativeInteger(steps);
 
-    if (additionalBytes === 0) return this.#capacity;
+    if (steps === 0) return this.capacity;
 
-    const newCapacity = this.#capacity + additionalBytes;
+    const nextExponent = this.#capacityExponent + steps;
+    this.#assertMaxCapacity(nextExponent);
 
-    this.#assertMaxCapacity(newCapacity);
-
-    this.#capacity = alignToPowerOfTwo(newCapacity);
+    this.#growToExponent(nextExponent);
   }
 
-  fill(data, count) {
-    this.#assertMutable("fill");
+  write(bytes) {
+    this.#assertMutable("write");
 
-    if (!Number.isInteger(data) || data < 0 || data > 255) {
-      // TODO: throw TypeError when byte value is out of 0-255 range
+    if (bytes instanceof Uint8Array) {
+      // TODO: Implement error handling for invalid Uint8Array.
+      throw new Error("Not implemented");
     }
 
-    this.#assertNonNegativeInteger(count, "fill");
+    const byteLength = bytes.length;
+    if (byteLength === 0) return this;
 
-    if (count === 0) return this.#writeOffset;
+    this.#ensureCapacity(byteLength);
 
-    this.#uint8.fill(data, this.#writeOffset, this.#writeOffset + count);
-    this.#writeOffset += count;
-    return this.#writeOffset;
+    this.#uint8.set(bytes, this.#writeOffset);
+    this.#writeOffset += byteLength;
+
+    return this;
   }
 
   append(data) {
     this.#assertMutable("append");
 
-    const source = this.#setDataType(data);
-    const lengthSource = source.length;
+    const uint8 = this.#toUint8Array(data);
 
-    if (lengthSource === 0) return this.#writeOffset;
-
-    this.#ensureCapacity(lengthSource);
-
-    this.#uint8.set(data, this.#writeOffset);
-    this.#writeOffset += lengthSource;
-    return this.#writeOffset;
+    return this.write(uint8);
   }
 
-  write(data, offset = 0) {
-    this.#assertMutable("write");
+  fill(byte, count) {
+    this.#assertMutable("fill");
 
-    const source = this.#setDataType(data);
-    const lengthSource = source.length;
+    const data = this.#toUint8Array(Number(byte));
 
-    if (lengthSource === 0) return this.#writeOffset;
+    this.#assertNonNegativeInteger(count, "fill");
 
-    this.#assertReadable(lengthSource, offset, "write");
+    if (count === 0) return this;
 
-    const newOffset = this.#readOffset + offset;
-    this.#uint8.set(data, newOffset);
+    const bytes = new Uint8Array(count);
+    bytes.fill(data[0]);
 
-    return this.#writeOffset;
+    this.write(bytes);
   }
 
   peek(size = this.readableBytes, offset = 0) {
@@ -231,19 +220,20 @@ export class DynamicBuffer {
     }
   }
 
-  #growToPower(needPower) {
-    const newCapacity = 1 << needPower;
+  #growToExponent(needExponent) {
+    const newCapacity = 1 << needExponent;
 
     this.#arrayBuffer = new ArrayBuffer(newCapacity);
     this.#view = new DataView(this.#arrayBuffer);
 
     const newUint8 = new Uint8Array(this.#arrayBuffer);
     this.#uint8 = newUint8.set(this.#uint8.subarray(0, this.#writeOffset));
-    this.#capacity = newCapacity;
+
+    this.#capacityExponent = needExponent;
   }
 
   #maybeCompact() {
-    const radio = this.readOffset / this.#capacity;
+    const radio = this.readOffset / this.capacity;
     if (radio >= this.#config.compactThreshold) {
       this.compact();
     }
@@ -252,16 +242,15 @@ export class DynamicBuffer {
   #ensureCapacity(needBytes) {
     this.#maybeCompact();
 
-    const requiredCapacity = this.#writeOffset + needBytes;
-    if (this.capacity >= requiredCapacity) return;
+    const requiredExponent = alignToPowerOfTwo(this.#writeOffset + needBytes);
+    if (requiredExponent <= this.#capacityExponent) return;
 
-    const newCapacityPower = alignToPowerOfTwo(requiredCapacity);
-    this.#assertMaxCapacity(newCapacityPower);
+    this.#assertMaxCapacity(requiredExponent);
 
-    this.#growToPower(newCapacityPower);
+    this.#growToExponent(requiredExponent);
   }
 
-  #setDataType(data) {
+  #toUint8Array(data) {
     // -- Uint8Array --
     if (data instanceof Uint8Array) {
       return data;
@@ -285,8 +274,8 @@ export class DynamicBuffer {
     // TODO: Implement error handling for invalid data types
   }
 
-  #assertMaxCapacity(newCapacity) {
-    if (newCapacity > this.#config.maxCapacityExponent) {
+  #assertMaxCapacity(newExponent) {
+    if (newExponent > this.#config.maxCapacityExponent) {
       // TODO: Implement overflow handling
     }
   }
