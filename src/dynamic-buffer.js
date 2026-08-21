@@ -45,6 +45,7 @@ export class DynamicBuffer {
     } = options;
 
     this.#config = {
+      initialExponent,
       maxCapacityExponent,
       compactThreshold,
     };
@@ -319,6 +320,18 @@ export class DynamicBuffer {
     this.#readOffset = 0;
 
     return discarded;
+  }
+
+  reset() {
+    this.#capacityExponent = this.#config.initialExponent;
+    this.#arrayBuffer = new ArrayBuffer(1 << this.#capacityExponent);
+    this.#view = new DataView(this.#arrayBuffer);
+    this.#uint8 = new Uint8Array(this.#arrayBuffer);
+    this.#uint8.fill(0);
+
+    this.#frozen = false;
+    this.#writeOffset = 0;
+    this.#readOffset = 0;
   }
 
   #writeType(offset, type, value, littleEndian) {
