@@ -27,6 +27,10 @@ function alignToPowerOfTwo(value) {
   return 1 << (32 - Math.clz32(value - 1));
 }
 
+function toUint8Array(value) {
+  return value instanceof Uint8Array ? value : Uint8Array.from(value);
+}
+
 export class DynamicBuffer {
   #capacityExponent;
   #view;
@@ -50,7 +54,7 @@ export class DynamicBuffer {
       compactThreshold,
     };
 
-    const source = this.#toUint8Array(data);
+    const source = this.#normalizeData(data);
     const needed = source.length;
 
     const needExponent = alignToPowerOfTwo(needed);
@@ -216,7 +220,7 @@ export class DynamicBuffer {
   append(data) {
     this.#assertMutable("append");
 
-    const uint8 = this.#toUint8Array(data);
+    const uint8 = this.#normalizeData(data);
 
     return this.write(uint8);
   }
@@ -224,7 +228,7 @@ export class DynamicBuffer {
   fill(byte, count) {
     this.#assertMutable("fill");
 
-    const data = this.#toUint8Array(Number(byte));
+    const data = this.#normalizeData(Number(byte));
 
     this.#assertNonNegativeInteger(count, "fill");
 
@@ -346,19 +350,56 @@ export class DynamicBuffer {
     return this.#uint8.subarray(...range);
   }
 
+  //FIX: Convert logical offset to physical buffer index.
   startsWith(prefix) {
-    const bufferPrefix =
-      prefix instanceof Uint8Array ? prefix : Uint8Array.from(prefix);
+    const uint8ArrayPrefix = toUint8Array(prefix);
 
-    const byteLength = bufferPrefix.length;
-
+    const byteLength = uint8ArrayPrefix.length;
     if (byteLength > this.readableBytes) return false;
 
-    for (let index = 0; index < bufferPrefix.length; index++) {
-      if (this.#uint8[index] !== bufferPrefix[index]) return false;
+    for (let index = 0; index < uint8ArrayPrefix.length; index++) {
+      if (this.#uint8[index] !== uint8ArrayPrefix[index]) return false;
     }
 
     return true;
+  }
+
+  //FIX: Convert logical offset to physical buffer index.
+  endsWith(suffix) {
+    const uint8ArraySuffix = toUint8Array(suffix);
+
+    const byteLength = uint8ArraySuffix.length;
+    if (byteLength > this.readableBytes) return false;
+
+    const offset = this.readableBytes - uint8ArraySuffix.length;
+
+    for (let index = 0; index < uint8ArraySuffix.length; index++) {
+      if (this.#uint8[offset - index] !== uint8ArraySuffix[index]) return false;
+    }
+
+    return true;
+  }
+
+  //FIX: Convert logical offset to physical buffer index.
+  indexOf(pattern, fromIndex = 0) {
+    const bytes = toUint8Array(pattern);
+
+    if (bytes.length === 0) return 0;
+    if (bytes.length > this.readableBytes) return -1;
+
+    const limit = this.readableBytes - bytes.length;
+
+    outer: for (let index = Math.max(0, fromIndex); index <= limit; index++) {
+      for (let cursor = 0; cursor < bytes.length; cursor++) {
+        if (this.#uint8[index + cursor] !== bytes[cursor]) continue outer;
+      }
+      return index;
+    }
+    return -1;
+  }
+
+  includes(pattern) {
+    return this.indexOf(pattern) !== -1;
   }
 
   #writeType(offset, type, value, littleEndian) {
@@ -493,7 +534,7 @@ export class DynamicBuffer {
     this.#growToExponent(requiredExponent);
   }
 
-  #toUint8Array(data) {
+  #normalizeData(data) {
     // -- Uint8Array --
     if (data instanceof Uint8Array) {
       return data;
