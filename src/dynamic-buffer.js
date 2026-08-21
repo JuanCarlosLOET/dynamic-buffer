@@ -237,7 +237,7 @@ export class DynamicBuffer {
   }
 
   peek(size = this.readableBytes, offset = 0) {
-    this.#assertReadable(size, offset, "peek");
+    this.#assertReadableSlice(size, offset, "peek");
 
     const start = this.#readOffset + offset;
     const end = start + size;
@@ -246,13 +246,13 @@ export class DynamicBuffer {
   }
 
   peekByte(offset = 0) {
-    this.#assertReadable(0, offset, "peekByte");
+    this.#assertReadableSlice(0, offset, "peekByte");
     return this.#uint8[this.#readOffset + offset];
   }
 
   read(offset = 0) {
     this.#assertMutable("read");
-    this.#assertReadable(offset);
+    this.#assertReadableSlice();
 
     const start = this.#readOffset + offset;
     const end = this.#writeOffset;
@@ -334,6 +334,33 @@ export class DynamicBuffer {
     this.#readOffset = 0;
   }
 
+  slice(start = 0, end = this.readableBytes) {
+    const range = this.#assertReadableRange(start, end, "slice");
+
+    return this.#uint8.slice(...range);
+  }
+
+  subarray(start = 0, end = this.readableBytes) {
+    const range = this.#assertReadableRange(start, end, "subarray");
+
+    return this.#uint8.subarray(...range);
+  }
+
+  startsWith(prefix) {
+    const bufferPrefix =
+      prefix instanceof Uint8Array ? prefix : Uint8Array.from(prefix);
+
+    const byteLength = bufferPrefix.length;
+
+    if (byteLength > this.readableBytes) return false;
+
+    for (let index = 0; index < bufferPrefix.length; index++) {
+      if (this.#uint8[index] !== bufferPrefix[index]) return false;
+    }
+
+    return true;
+  }
+
   #writeType(offset, type, value, littleEndian) {
     this.#assertNonNegativeInteger(offset);
     this.#assertMutable("writeType");
@@ -381,7 +408,7 @@ export class DynamicBuffer {
 
     this.#assertNonNegativeInteger(offset);
 
-    this.#assertReadable(size, offset);
+    this.#assertReadableSlice(size, offset);
 
     const finalOffset = this.#readOffset + offset;
 
@@ -406,15 +433,26 @@ export class DynamicBuffer {
     return TYPE[type]();
   }
 
-  #assertReadable(
-    size = this.#readOffset,
-    offset = 0,
-    operation = "operation",
-  ) {
-    this.#assertNonNegativeInteger(offset, operation);
-    (this.#assertNonNegativeInteger(size), operation);
+  #assertReadableRange(start, end, operation = "operation") {
+    this.#assertNonNegativeInteger(start, operation);
+    this.#assertNonNegativeInteger(end, operation);
 
-    if (offset <= size - 1) {
+    if (start > end || end > this.readableBytes) {
+      // TODO: Throw error for out of range access
+      throw new Error("not implemented");
+    }
+
+    const physicalStart = start + this.#readOffset;
+    const physicalEnd = end + this.#readOffset;
+
+    return [physicalStart, physicalEnd];
+  }
+
+  #assertReadableSlice(size, offset, operation = "operation") {
+    this.#assertNonNegativeInteger(offset, operation);
+    this.#assertNonNegativeInteger(size, operation);
+
+    if (offset > this.readableBytes) {
       // TODO: Throw error for out of range access
       throw new Error("not implemented");
     }
@@ -479,7 +517,7 @@ export class DynamicBuffer {
     // TODO: Implement error handling for invalid data types
   }
 
-  #assertMaxCapacity(newExponent) {
+  #assertMaxCapacity(newExponent, operation = "operation") {
     if (newExponent > this.#config.maxCapacityExponent) {
       // TODO: Implement overflow handling
     }
